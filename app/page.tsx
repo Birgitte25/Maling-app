@@ -1,38 +1,45 @@
 "use client"
 import { useState, useEffect } from "react"
 
+// ===== Types =====
+
+type Wall = { width: string; height: string }
+
 type Project = {
   id: number
   name: string
+  walls: Wall[]
+  windows: Wall[]
+  doors: Wall[]
+  coats: number
   area: number
+  liters: number
 }
 
-type Inspiration = {
-  id: number
-  image: string
-  projectId: number
-}
+// ===== App =====
 
 export default function Home() {
 
   // Splash
   const [loading, setLoading] = useState(true)
+
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 1000)
+    const t = setTimeout(() => setLoading(false), 800)
     return () => clearTimeout(t)
   }, [])
 
-  // Tabs & screens
-  const [tab, setTab] = useState<"projects" | "inspiration">("projects")
-  const [screen, setScreen] = useState<"dashboard" | "details" | "calculator">("dashboard")
-
-  const [activeProject, setActiveProject] = useState<Project | null>(null)
-
-  // UI
+  // Theme
   const [darkMode, setDarkMode] = useState(true)
 
-  // Projects (LocalStorage)
+  // Navigation
+  const [screen, setScreen] = useState<"home" | "calculator" | "projects" | "details">("home")
+
+  // Projects
   const [projects, setProjects] = useState<Project[]>([])
+  const [activeProject, setActiveProject] = useState<Project | null>(null)
+
+  const [showSave, setShowSave] = useState(false)
+  const [projectName, setProjectName] = useState("")
 
   useEffect(() => {
     const saved = localStorage.getItem("projects")
@@ -43,269 +50,495 @@ export default function Home() {
     localStorage.setItem("projects", JSON.stringify(projects))
   }, [projects])
 
-  // Inspirations (LocalStorage)
-  const [inspirations, setInspirations] = useState<Inspiration[]>([])
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
-
-  useEffect(() => {
-    const saved = localStorage.getItem("inspirations")
-    if (saved) setInspirations(JSON.parse(saved))
-  }, [])
-
-  useEffect(() => {
-    localStorage.setItem("inspirations", JSON.stringify(inspirations))
-  }, [inspirations])
-
-  const [previewImage, setPreviewImage] = useState<string | null>(null)
-
   // Calculator
-  const [length, setLength] = useState("")
-  const [width, setWidth] = useState("")
-  const [height, setHeight] = useState("")
-  const [result, setResult] = useState<string | null>(null)
+  const emptyWall = { width: "", height: "" }
 
-  // Save project
-  const [showSave, setShowSave] = useState(false)
-  const [projectName, setProjectName] = useState("")
+  const [walls, setWalls] = useState<Wall[]>([{ ...emptyWall }])
+  const [windows, setWindows] = useState<Wall[]>([])
+  const [doors, setDoors] = useState<Wall[]>([])
+  const [coats, setCoats] = useState(2)
+
+  const [netArea, setNetArea] = useState<number | null>(null)
+  const [liters, setLiters] = useState<number | null>(null)
+
+  // ===== Functions =====
+
+  function resetCalculator() {
+    setWalls([{ ...emptyWall }])
+    setWindows([])
+    setDoors([])
+    setCoats(2)
+    setNetArea(null)
+    setLiters(null)
+    setActiveProject(null)
+  }
+
+  function addWall() {
+    setWalls([...walls, { ...emptyWall }])
+  }
+
+  function removeWall(i: number) {
+    if (walls.length === 1) return
+    setWalls(walls.filter((_, index) => index !== i))
+  }
+
+  function addWindow() {
+    setWindows([...windows, { ...emptyWall }])
+  }
+
+  function removeWindow(i: number) {
+    setWindows(windows.filter((_, index) => index !== i))
+  }
+
+  function addDoor() {
+    setDoors([...doors, { ...emptyWall }])
+  }
+
+  function removeDoor(i: number) {
+    setDoors(doors.filter((_, index) => index !== i))
+  }
+
+  function addStandardWindow(w: number, h: number) {
+    setWindows([...windows, { width: w.toString(), height: h.toString() }])
+  }
+
+  function addStandardDoor(w: number, h: number) {
+    setDoors([...doors, { width: w.toString(), height: h.toString() }])
+  }
+
+  function calculatePaint() {
+
+    let wallArea = 0
+    let openingArea = 0
+
+    walls.forEach(w => {
+      const a = parseFloat(w.width) * parseFloat(w.height)
+      if (!isNaN(a)) wallArea += a
+    })
+
+    windows.forEach(w => {
+      const a = parseFloat(w.width) * parseFloat(w.height)
+      if (!isNaN(a)) openingArea += a
+    })
+
+    doors.forEach(d => {
+      const a = parseFloat(d.width) * parseFloat(d.height)
+      if (!isNaN(a)) openingArea += a
+    })
+
+    const usable = wallArea - openingArea
+
+    if (usable <= 0) {
+      alert("Ugyldig areal")
+      return
+    }
+
+    const needed = (usable * coats) / 8
+
+    setNetArea(Number(usable.toFixed(2)))
+    setLiters(Number(needed.toFixed(2)))
+  }
+
+  function saveProject() {
+
+    if (!projectName || netArea === null || liters === null) return
+
+    const newProject: Project = {
+      id: Date.now(),
+      name: projectName,
+      walls,
+      windows,
+      doors,
+      coats,
+      area: netArea,
+      liters
+    }
+
+    setProjects([...projects, newProject])
+    setShowSave(false)
+    setProjectName("")
+    resetCalculator()
+    setScreen("projects")
+  }
+
+  function loadProject(p: Project) {
+
+  setWalls(p.walls || [{ width: "", height: "" }])
+  setWindows(p.windows || [])
+  setDoors(p.doors || [])
+  setCoats(p.coats || 2)
+  setNetArea(p.area || null)
+  setLiters(p.liters || null)
+
+  setActiveProject(p)
+  setScreen("calculator")
+}
+function deleteProject(id: number) {
+
+  const confirmDelete = confirm("Vil du slette prosjektet permanent?")
+
+  if (!confirmDelete) return
+
+  setProjects(projects.filter(p => p.id !== id))
+
+  setActiveProject(null)
+  setScreen("projects")
+}
+
+  // ===== UI =====
 
   if (loading) {
     return (
-      <div className="min-h-screen flex justify-center items-center bg-gray-900 text-white">
+      <div className="min-h-screen flex justify-center items-center bg-gray-900 text-white text-xl">
         🎨 Laster...
       </div>
     )
   }
 
-  function calculate() {
-    if (!length || !width || !height) return
-
-    const area = 2 * (parseFloat(length) + parseFloat(width)) * parseFloat(height)
-    const liters = area / 8
-
-    setResult(liters.toFixed(2))
-  }
-
-  function saveProject() {
-    if (!projectName || !result) return
-
-    const area = Math.round(
-      2 * (parseFloat(length) + parseFloat(width)) * parseFloat(height)
-    )
-
-    setProjects([...projects, {
-      id: Date.now(),
-      name: projectName,
-      area
-    }])
-
-    setProjectName("")
-    setShowSave(false)
-    setScreen("dashboard")
-  }
-
-  function addInspiration(e: any) {
-
-    if (!selectedProjectId) {
-      alert("Velg prosjekt først")
-      return
-    }
-
-    const file = e.target.files[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setInspirations([
-        ...inspirations,
-        {
-          id: Date.now(),
-          image: reader.result as string,
-          projectId: selectedProjectId
-        }
-      ])
-    }
-
-    reader.readAsDataURL(file)
-  }
-
-  const bg = darkMode ? "bg-gray-900" : "bg-gray-100"
-  const card = darkMode ? "bg-gray-800 text-white" : "bg-white text-gray-900"
+  const bg = darkMode ? "bg-gray-900 text-white" : "bg-gray-100 text-black"
+  const card = darkMode ? "bg-gray-800" : "bg-white"
 
   return (
-    <div className={`min-h-screen ${bg} flex justify-center items-center`}>
-      <div className={`w-full max-w-md p-5 rounded-xl shadow-xl ${card}`}>
+    <div className={`min-h-screen flex justify-center items-center p-4 ${bg}`}>
 
-        {/* Top nav */}
+      <div className={`${card} p-5 rounded-2xl w-full max-w-md shadow-xl`}>
+
+        {/* Top bar */}
+
         <div className="flex justify-between mb-3">
-          <button onClick={() => setTab("projects")}>🏠 Prosjekter</button>
-          <button onClick={() => setTab("inspiration")}>🎨 Inspirasjon</button>
+          <button onClick={() => setScreen("home")}>🏠</button>
           <button onClick={() => setDarkMode(!darkMode)}>
             {darkMode ? "☀️" : "🌙"}
           </button>
         </div>
 
-        {/* ============ PROJECT TAB ============ */}
+        {/* HOME */}
 
-        {tab === "projects" && (
-          <>
-            {screen === "dashboard" && (
-              <>
-                <h2 className="font-bold mb-3">Mine prosjekter</h2>
+        {screen === "home" && (
+          <div className="space-y-3 text-center">
 
-                <div className="grid grid-cols-2 gap-3">
+            <h1 className="text-2xl font-bold">🎨 Maling App</h1>
 
-                  {projects.map(p => (
-                    <div
-                      key={p.id}
-                      onClick={() => {
-                        setActiveProject(p)
-                        setScreen("details")
-                      }}
-                      className="bg-gray-700 p-3 rounded-xl cursor-pointer"
-                    >
-                      <h3>{p.name}</h3>
-                      <p className="text-sm opacity-70">{p.area} m²</p>
-                    </div>
-                  ))}
-
-                  <button
-                    onClick={() => {
-                      setLength("")
-                      setWidth("")
-                      setHeight("")
-                      setResult(null)
-                      setScreen("calculator")
-                    }}
-                    className="border-2 border-dashed p-3 rounded-xl"
-                  >
-                    + Nytt prosjekt
-                  </button>
-
-                </div>
-              </>
-            )}
-
-            {screen === "details" && activeProject && (
-              <>
-                <button onClick={() => setScreen("dashboard")}>← Tilbake</button>
-
-                <h2 className="text-xl font-bold mt-2">
-                  {activeProject.name}
-                </h2>
-
-                <p className="opacity-70 mb-3">
-                  {activeProject.area} m²
-                </p>
-
-                <h3 className="font-semibold mb-2">🎨 Inspirasjon</h3>
-
-                <div className="grid grid-cols-2 gap-2 mb-4">
-
-                  {inspirations
-                    .filter(i => i.projectId === activeProject.id)
-                    .map(i => (
-                      <img
-                        key={i.id}
-                        src={i.image}
-                        onClick={() => setPreviewImage(i.image)}
-                        className="rounded-xl aspect-square object-cover"
-                      />
-                    ))}
-
-                </div>
-
-                <button
-                  onClick={() => setScreen("calculator")}
-                  className="w-full bg-indigo-600 p-3 rounded-xl"
-                >
-                  Beregn på nytt
-                </button>
-
-              </>
-            )}
-
-            {screen === "calculator" && (
-              <>
-                <button onClick={() => setScreen("dashboard")}>← Tilbake</button>
-
-                <div className="space-y-2 mt-3">
-
-                  <input placeholder="Lengde" value={length} onChange={e => setLength(e.target.value)} className="w-full p-2 rounded bg-gray-700" />
-                  <input placeholder="Bredde" value={width} onChange={e => setWidth(e.target.value)} className="w-full p-2 rounded bg-gray-700" />
-                  <input placeholder="Høyde" value={height} onChange={e => setHeight(e.target.value)} className="w-full p-2 rounded bg-gray-700" />
-
-                  <button onClick={calculate} className="w-full bg-blue-600 p-3 rounded-xl">
-                    Beregn maling
-                  </button>
-
-                  {result && (
-                    <div className="bg-gray-700 p-3 rounded-xl">
-                      <p>✅ {result} liter</p>
-
-                      <button
-                        onClick={() => setShowSave(true)}
-                        className="w-full bg-green-600 mt-2 p-2 rounded-xl"
-                      >
-                        Lagre prosjekt
-                      </button>
-                    </div>
-                  )}
-
-                </div>
-              </>
-            )}
-          </>
-        )}
-
-        {/* ============ INSPIRATION TAB ============ */}
-
-        {tab === "inspiration" && (
-          <>
-            <h2 className="font-bold mb-3">Legg inspirasjon til prosjekt</h2>
-
-            <select
-              className="w-full p-2 rounded mb-3 bg-gray-700"
-              onChange={(e) => setSelectedProjectId(Number(e.target.value))}
+            <button
+              onClick={() => {
+                resetCalculator()
+                setScreen("calculator")
+              }}
+              className="w-full bg-indigo-600 p-3 rounded-xl"
             >
-              <option value="">Velg prosjekt</option>
-              {projects.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+              🧮 Rask beregning
+            </button>
 
-            <label className="block bg-indigo-600 text-center p-3 rounded-xl cursor-pointer">
-              + Last opp bilde
-              <input type="file" hidden accept="image/*" onChange={addInspiration} />
-            </label>
+            <button
+              onClick={() => setScreen("projects")}
+              className="w-full bg-blue-600 p-3 rounded-xl"
+            >
+              🏠 Mine prosjekter
+            </button>
 
-          </>
-        )}
-
-        {/* IMAGE PREVIEW */}
-
-        {previewImage && (
-          <div
-            onClick={() => setPreviewImage(null)}
-            className="fixed inset-0 bg-black/80 flex justify-center items-center"
-          >
-            <img src={previewImage} className="max-w-[90%] max-h-[90%] rounded-xl" />
           </div>
         )}
 
-        {/* SAVE PROJECT */}
+        {/* PROJECT LIST */}
 
-        {showSave && (
+        {screen === "projects" && (
+          <>
+            <h2 className="font-bold mb-3">Mine prosjekter</h2>
+
+            <div className="grid grid-cols-2 gap-3">
+
+              {projects.map(p => (
+                <div
+                  key={p.id}
+                  onClick={() => {
+                    setActiveProject(p)
+                    setScreen("details")
+                  }}
+                  className="bg-gray-700 p-3 rounded-xl cursor-pointer hover:bg-gray-600"
+                >
+                  <h3>{p.name}</h3>
+                  <p className="text-sm opacity-70">
+                    {p.area} m² • {p.liters} L
+                  </p>
+                </div>
+              ))}
+
+            </div>
+          </>
+        )}
+
+        {/* PROJECT DETAILS */}
+
+        {screen === "details" && activeProject && (
+          <>
+            <button
+              onClick={() => setScreen("projects")}
+              className="mb-2"
+            >
+              ← Tilbake
+            </button>
+
+            <h2 className="text-xl font-bold">
+              {activeProject.name}
+            </h2>
+
+            <p className="opacity-70 mb-4">
+              {activeProject.area} m² • {activeProject.liters} liter
+            </p>
+
+            <button
+              onClick={() => loadProject(activeProject)}
+              className="w-full bg-indigo-600 p-3 rounded-xl"
+            >
+              Rediger beregning
+            </button>
+            <button
+  onClick={() => deleteProject(activeProject.id)}
+  className="w-full bg-red-600 p-3 rounded-xl"
+>
+  Slett prosjekt
+</button>
+
+          </>
+        )}
+
+        {/* CALCULATOR */}
+
+        {screen === "calculator" && (
+          <>
+            <button onClick={() => setScreen("home")} className="mb-2">
+              ← Tilbake
+            </button>
+
+            <h2 className="font-bold mb-2">Kalkulator</h2>
+
+            {/* WALLS */}
+
+            <div className="bg-gray-700/40 p-3 rounded-xl mb-3">
+
+              <h3 className="text-blue-400 mb-2">Vegger</h3>
+
+              {walls.map((w, i) => (
+                <div key={i} className="flex gap-2 mb-2">
+
+                  <input
+                    placeholder="Bredde"
+                    value={w.width}
+                    onChange={(e) => {
+                      const copy = [...walls]
+                      copy[i].width = e.target.value
+                      setWalls(copy)
+                    }}
+                    className="w-full p-2 rounded bg-gray-700"
+                  />
+
+                  <input
+                    placeholder="Høyde"
+                    value={w.height}
+                    onChange={(e) => {
+                      const copy = [...walls]
+                      copy[i].height = e.target.value
+                      setWalls(copy)
+                    }}
+                    className="w-full p-2 rounded bg-gray-700"
+                  />
+
+                  {walls.length > 1 && (
+                    <button
+                      onClick={() => removeWall(i)}
+                      className="text-red-400"
+                    >
+                      ✕
+                    </button>
+                  )}
+
+                </div>
+              ))}
+
+              <button
+                onClick={addWall}
+                className="text-sm text-blue-400"
+              >
+                + Legg til vegg
+              </button>
+
+            </div>
+
+            {/* WINDOWS */}
+
+            <div className="bg-gray-700/40 p-3 rounded-xl mb-3">
+
+              <h3 className="text-blue-400 mb-2">Vinduer</h3>
+
+              <div className="flex gap-2 mb-2">
+                <button
+                  onClick={() => addStandardWindow(1, 1.2)}
+                  className="bg-gray-700 px-2 py-1 rounded text-sm"
+                >
+                  100x120
+                </button>
+
+                <button
+                  onClick={() => addStandardWindow(1.2, 1.2)}
+                  className="bg-gray-700 px-2 py-1 rounded text-sm"
+                >
+                  120x120
+                </button>
+              </div>
+
+              {windows.map((w, i) => (
+                <div key={i} className="flex gap-2 mb-2">
+
+                  <input
+                    placeholder="Bredde"
+                    value={w.width}
+                    onChange={(e) => {
+                      const copy = [...windows]
+                      copy[i].width = e.target.value
+                      setWindows(copy)
+                    }}
+                    className="w-full p-2 rounded bg-gray-700"
+                  />
+
+                  <input
+                    placeholder="Høyde"
+                    value={w.height}
+                    onChange={(e) => {
+                      const copy = [...windows]
+                      copy[i].height = e.target.value
+                      setWindows(copy)
+                    }}
+                    className="w-full p-2 rounded bg-gray-700"
+                  />
+
+                  <button
+                    onClick={() => removeWindow(i)}
+                    className="text-red-400"
+                  >
+                    ✕
+                  </button>
+
+                </div>
+              ))}
+
+            </div>
+
+            {/* DOORS */}
+
+            <div className="bg-gray-700/40 p-3 rounded-xl mb-3">
+
+              <h3 className="text-blue-400 mb-2">Dører</h3>
+
+              <div className="flex gap-2 mb-2">
+                <button
+                  onClick={() => addStandardDoor(0.8, 2.1)}
+                  className="bg-gray-700 px-2 py-1 rounded text-sm"
+                >
+                  80x210
+                </button>
+
+                <button
+                  onClick={() => addStandardDoor(0.9, 2.1)}
+                  className="bg-gray-700 px-2 py-1 rounded text-sm"
+                >
+                  90x210
+                </button>
+              </div>
+
+              {doors.map((d, i) => (
+                <div key={i} className="flex gap-2 mb-2">
+
+                  <input
+                    placeholder="Bredde"
+                    value={d.width}
+                    onChange={(e) => {
+                      const copy = [...doors]
+                      copy[i].width = e.target.value
+                      setDoors(copy)
+                    }}
+                    className="w-full p-2 rounded bg-gray-700"
+                  />
+
+                  <input
+                    placeholder="Høyde"
+                    value={d.height}
+                    onChange={(e) => {
+                      const copy = [...doors]
+                      copy[i].height = e.target.value
+                      setDoors(copy)
+                    }}
+                    className="w-full p-2 rounded bg-gray-700"
+                  />
+
+                  <button
+                    onClick={() => removeDoor(i)}
+                    className="text-red-400"
+                  >
+                    ✕
+                  </button>
+
+                </div>
+              ))}
+
+            </div>
+
+            {/* COATS */}
+
+            <input
+              type="number"
+              min={1}
+              value={coats}
+              onChange={(e) => setCoats(Number(e.target.value))}
+              className="w-full p-2 rounded bg-gray-700 mb-3"
+              placeholder="Antall strøk"
+            />
+
+            {/* CALCULATE */}
+
+            <button
+              onClick={calculatePaint}
+              className="w-full bg-indigo-600 p-3 rounded-xl"
+            >
+              Beregn maling
+            </button>
+
+            {/* RESULT */}
+
+            {liters !== null && netArea !== null && (
+              <div className="bg-indigo-700 p-4 rounded-xl mt-3">
+
+                <p className="text-sm opacity-80">Areal</p>
+                <p className="font-bold">{netArea} m²</p>
+
+                <p className="text-sm opacity-80 mt-2">Maling</p>
+                <p className="font-bold text-xl">{liters} liter</p>
+
+                <button
+                  onClick={() => setShowSave(true)}
+                  className="bg-green-600 w-full p-2 rounded-xl mt-3"
+                >
+                  Lag prosjekt
+                </button>
+
+              </div>
+            )}
+
+          </>
+        )}
+
+        {/* SAVE POPUP */}
+
+               {showSave && (
           <div className="fixed inset-0 bg-black/70 flex justify-center items-center">
+            <div className="bg-white p-4 rounded-xl w-64 text-black">
 
-            <div className="bg-white text-black p-5 rounded-xl w-64">
-
-              <h3 className="font-bold mb-2">Lagre prosjekt</h3>
+              <h3 className="font-bold mb-2">Prosjektnavn</h3>
 
               <input
-                placeholder="Prosjektnavn"
                 value={projectName}
-                onChange={e => setProjectName(e.target.value)}
-                className="border p-2 w-full rounded mb-3"
+                onChange={(e) => setProjectName(e.target.value)}
+                className="border p-2 w-full mb-2"
+                placeholder="F.eks Stue"
               />
 
               <button
